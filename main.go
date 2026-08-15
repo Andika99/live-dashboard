@@ -4,31 +4,51 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
+	// "math/rand"
 	"net/http"
 	"time"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
-// Metrics represents the live dashboard data payload
+// Metrics structure remains matching your frontend names
 type Metrics struct {
 	Timestamp string  `json:"timestamp"`
 	CPUUsage  float64 `json:"cpu_usage"`
 	MemUsage  float64 `json:"mem_usage"`
-	Requests  int     `json:"requests"`
+	Requests  int     `json:"requests"` // We can use this to show total memory used in MB instead
 }
 
-// generateMockData acts as our streaming ingestion source.
-// It generates random metrics every 200ms and sends them to the broker.
-func generateMockData(broker *Broker) {
-	ticker := time.NewTicker(200 * time.Millisecond)
+func generateRealData(broker *Broker) {
+	// Query the hardware every 500ms to avoid overwhelming the OS kernel
+	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
 	for range ticker.C {
+		// 1. Fetch Real CPU Utilization 
+		// Passing 0 tells it to calculate the average usage since the last check immediately
+		cpuPercentages, err := cpu.Percent(0, false)
+		var currentCPU float64
+		if err == nil && len(cpuPercentages) > 0 {
+			currentCPU = cpuPercentages[0]
+		}
+
+		// 2. Fetch Real Virtual Memory Allocation
+		vMem, err := mem.VirtualMemory()
+		var currentMem float64
+		var totalUsedMB int
+		if err == nil {
+			currentMem = vMem.UsedPercent
+			// Convert bytes used to Megabytes for an extra cool live data point
+			totalUsedMB = int(vMem.Used / 1024 / 1024) 
+		}
+
+		// 3. Assemble the authentic system payload
 		data := Metrics{
 			Timestamp: time.Now().Format("15:04:05.000"),
-			CPUUsage:  20.0 + rand.Float64()*40.0, // 20% - 60%
-			MemUsage:  45.0 + rand.Float64()*15.0, // 45% - 60%
-			Requests:  rand.Intn(150) + 50,        // 50 - 200 reqs
+			CPUUsage:  currentCPU,
+			MemUsage:  currentMem,
+			Requests:  totalUsedMB, // Swapping mock requests with real MB allocated
 		}
 
 		payload, err := json.Marshal(data)
@@ -37,16 +57,18 @@ func generateMockData(broker *Broker) {
 			continue
 		}
 
+		// Push directly into your streaming broker pipeline
 		broker.incoming <- string(payload)
 	}
 }
+
 
 func main() {
 	broker := NewBroker()
 
 	// Start background engine loops
 	go broker.Start()
-	go generateMockData(broker)
+	go generateRealData(broker)
 
 	// Serve the static HTML frontend dashboard
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
