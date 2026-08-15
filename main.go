@@ -12,23 +12,38 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 )
 
-// Metrics structure remains matching your frontend names
+// Metrics structure with read/write speed (bytes per second)
 type Metrics struct {
-	Timestamp string  `json:"timestamp"`
-	CPUUsage  float64 `json:"cpu_usage"`
-	MemUsage  float64 `json:"mem_usage"`
-	Requests  int     `json:"requests"` // We can use this to show total memory used in MB instead
-	DiskUsage float64 `json:"disk_usage"`
+	Timestamp      string  `json:"timestamp"`
+	CPUUsage       float64 `json:"cpu_usage"`
+	MemUsage       float64 `json:"mem_usage"`
+	DiskUsage      float64 `json:"disk_usage"`
+	DiskWrite      uint64  `json:"disk_write"`      // Total bytes written (cumulative)
+	DiskRead       uint64  `json:"disk_read"`       // Total bytes read (cumulative)
+	DiskWriteSpeed uint64  `json:"disk_write_speed"` // Bytes per second
+	DiskReadSpeed  uint64  `json:"disk_read_speed"`  // Bytes per second
+}
+
+// Track previous values to calculate speed
+type DiskStats struct {
+	PrevWrite uint64
+	PrevRead  uint64
+	PrevTime  time.Time
 }
 
 func generateRealData(broker *Broker) {
-	// Query the hardware every 500ms to avoid overwhelming the OS kernel
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
+	// Initialize disk stats tracker
+	diskStats := DiskStats{
+		PrevWrite: 0,
+		PrevRead:  0,
+		PrevTime:  time.Now(),
+	}
+
 	for range ticker.C {
 		// 1. Fetch Real CPU Utilization 
-		// Passing 0 tells it to calculate the average usage since the last check immediately
 		cpuPercentages, err := cpu.Percent(0, false)
 		var currentCPU float64
 		if err == nil && len(cpuPercentages) > 0 {
@@ -38,27 +53,74 @@ func generateRealData(broker *Broker) {
 		// 2. Fetch Real Virtual Memory Allocation
 		vMem, err := mem.VirtualMemory()
 		var currentMem float64
-		var totalUsedMB int
 		if err == nil {
 			currentMem = vMem.UsedPercent
-			// Convert bytes used to Megabytes for an extra cool live data point
-			totalUsedMB = int(vMem.Used / 1024 / 1024) 
 		}
 
-		// Check Disk Percentage
+		// 3. Check Disk Percentage
 		diskUsage, err := disk.Usage("/")
 		var currentDisk float64
 		if err == nil {
 			currentDisk = diskUsage.UsedPercent
 		}
 
-		// 3. Assemble the authentic system payload
+		// 4. Get Disk I/O Statistics
+		ioStats, err := disk.IOCounters()
+		var diskWrite uint64
+		var diskRead uint64
+		var diskWriteSpeed uint64
+		var diskReadSpeed uint64
+		
+		if err == nil {
+			// Try common disk names
+			stat, ok := ioStats["sda"]
+			if !ok {
+				stat, ok = ioStats["nvme0n1"]
+			}
+			if !ok {
+				stat, ok = ioStats["vda"]
+			}
+			if !ok {
+				// Fallback to first available
+				for _, s := range ioStats {
+					stat = s
+					break
+				}
+			}
+			
+			diskWrite = stat.WriteBytes
+			diskRead = stat.ReadBytes
+
+			// Calculate speed (bytes per second)
+			now := time.Now()
+			timeDelta := now.Sub(diskStats.PrevTime).Seconds()
+			
+			if timeDelta > 0 && diskStats.PrevWrite > 0 && diskStats.PrevRead > 0 {
+				// Only calculate if we have previous values
+				writeDelta := diskWrite - diskStats.PrevWrite
+				readDelta := diskRead - diskStats.PrevRead
+				
+				// Speed = bytes / seconds
+				diskWriteSpeed = uint64(float64(writeDelta) / timeDelta)
+				diskReadSpeed = uint64(float64(readDelta) / timeDelta)
+			}
+			
+			// Update previous values for next calculation
+			diskStats.PrevWrite = diskWrite
+			diskStats.PrevRead = diskRead
+			diskStats.PrevTime = now
+		}
+
+		// 5. Assemble the payload
 		data := Metrics{
-			Timestamp: time.Now().Format("15:04:05.000"),
-			CPUUsage:  currentCPU,
-			MemUsage:  currentMem,
-			Requests:  totalUsedMB, // Swapping mock requests with real MB allocated
-			DiskUsage: currentDisk,
+			Timestamp:      time.Now().Format("15:04:05.000"),
+			CPUUsage:       currentCPU,
+			MemUsage:       currentMem,
+			DiskUsage:      currentDisk,
+			DiskWrite:      diskWrite,
+			DiskRead:       diskRead,
+			DiskWriteSpeed: diskWriteSpeed,
+			DiskReadSpeed:  diskReadSpeed,
 		}
 
 		payload, err := json.Marshal(data)

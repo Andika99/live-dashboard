@@ -21,24 +21,51 @@
         </header>
 
         <!-- Metrics Cards Grid -->
-        <main class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <main class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- CPU Card -->
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
                 <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">CPU Utilization</h2>
                 <p id="cpu-metric" class="text-4xl font-mono font-bold text-indigo-300 mt-2">0.00%</p>
             </div>
+            
+            <!-- Memory Card -->
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
                 <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Memory Allocation</h2>
                 <p id="mem-metric" class="text-4xl font-mono font-bold text-pink-300 mt-2">0.00%</p>
             </div>
+            
+            <!-- Disk Usage Card -->
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
                 <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Disk Usage</h2>
                 <p id="disk-metric" class="text-4xl font-mono font-bold text-cyan-300 mt-2">0.00%</p>
             </div>
+            
+            <!-- Disk Write Speed Card -->
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
-                <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Inbound Requests / sec</h2>
-                <p id="req-metric" class="text-4xl font-mono font-bold text-emerald-300 mt-2">0</p>
+                <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Disk Write Speed</h2>
+                <p id="disk-write-speed" class="text-4xl font-mono font-bold text-emerald-300 mt-2">0 B/s</p>
             </div>
-
+            
+            <!-- Disk Read Speed Card -->
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+                <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Disk Read Speed</h2>
+                <p id="disk-read-speed" class="text-4xl font-mono font-bold text-emerald-300 mt-2">0 B/s</p>
+            </div>
+            
+            <!-- Disk Total Read/Write Card (Combined) -->
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl col-span-1 md:col-span-1">
+                <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Total I/O</h2>
+                <div class="flex justify-between items-center mt-2">
+                    <div>
+                        <span class="text-xs text-gray-500">Read</span>
+                        <p id="disk-total-read" class="text-2xl font-mono font-bold text-blue-300">0 B</p>
+                    </div>
+                    <div>
+                        <span class="text-xs text-gray-500">Write</span>
+                        <p id="disk-total-write" class="text-2xl font-mono font-bold text-orange-300">0 B</p>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <!-- Log Terminal Output -->
@@ -51,6 +78,15 @@
     </div>
 
     <script>
+        // Helper function to format bytes to human-readable format
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
         // Use browser native API to listen to the Go server event stream
         const eventSource = new EventSource('/stream');
         const logTerminal = document.getElementById('log-terminal');
@@ -63,12 +99,19 @@
             document.getElementById('cpu-metric').innerText = `${metrics.cpu_usage.toFixed(2)}%`;
             document.getElementById('mem-metric').innerText = `${metrics.mem_usage.toFixed(2)}%`;
             document.getElementById('disk-metric').innerText = `${metrics.disk_usage.toFixed(2)}%`;
-            document.getElementById('req-metric').innerText = metrics.requests;
+            
+            // Update disk speeds with formatting
+            document.getElementById('disk-write-speed').innerText = formatBytes(metrics.disk_write_speed || 0) + '/s';
+            document.getElementById('disk-read-speed').innerText = formatBytes(metrics.disk_read_speed || 0) + '/s';
+            
+            // Update total read/write
+            document.getElementById('disk-total-write').innerText = formatBytes(metrics.disk_write || 0);
+            document.getElementById('disk-total-read').innerText = formatBytes(metrics.disk_read || 0);
 
             // Append raw transaction to visual console logger
             const logLine = document.createElement('div');
             logLine.className = 'border-l-2 border-indigo-500 pl-2 opacity-80 hover:opacity-100 transition-opacity';
-            logLine.innerText = `[${metrics.timestamp}] SSE Payload Ingested: CPU -> ${metrics.cpu_usage.toFixed(1)}% | Mem -> ${metrics.mem_usage.toFixed(1)}% | Req -> ${metrics.requests}`;
+            logLine.innerText = `[${metrics.timestamp}] CPU: ${metrics.cpu_usage.toFixed(1)}% | Mem: ${metrics.mem_usage.toFixed(1)}% | Disk: ${metrics.disk_usage.toFixed(1)}% | Write: ${formatBytes(metrics.disk_write_speed || 0)}/s | Read: ${formatBytes(metrics.disk_read_speed || 0)}/s`;
             
             logTerminal.appendChild(logLine);
 
@@ -80,6 +123,12 @@
 
         eventSource.onerror = function() {
             console.error("SSE connection dropped or server disconnected.");
+            // Attempt to reconnect after 3 seconds
+            setTimeout(() => {
+                console.log("Attempting to reconnect...");
+                // The EventSource will automatically try to reconnect
+                // but we can force a new connection if needed
+            }, 3000);
         };
     </script>
 </body>
