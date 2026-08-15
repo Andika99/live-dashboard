@@ -9,7 +9,7 @@
 
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen p-8">
-    <div class="max-w-5xl mx-auto">
+    <div class="max-w-6xl mx-auto">
         <header class="mb-8 border-b border-gray-800 pb-4 flex justify-between items-center">
             <div>
                 <h1 class="text-3xl font-extrabold tracking-tight text-indigo-400">Telemetry Engine</h1>
@@ -21,7 +21,7 @@
         </header>
 
         <!-- Metrics Cards Grid -->
-        <main class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <main class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
                 <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">CPU Utilization</h2>
                 <p id="cpu-metric" class="text-4xl font-mono font-bold text-indigo-300 mt-2">0.00%</p>
@@ -31,9 +31,14 @@
                 <p id="mem-metric" class="text-4xl font-mono font-bold text-pink-300 mt-2">0.00%</p>
             </div>
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+                <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Disk Usage</h2>
+                <p id="disk-metric" class="text-4xl font-mono font-bold text-cyan-300 mt-2">0.00%</p>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
                 <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Inbound Requests / sec</h2>
                 <p id="req-metric" class="text-4xl font-mono font-bold text-emerald-300 mt-2">0</p>
             </div>
+
         </main>
 
         <!-- Log Terminal Output -->
@@ -57,6 +62,7 @@
             // Update UI elements instantly 
             document.getElementById('cpu-metric').innerText = `${metrics.cpu_usage.toFixed(2)}%`;
             document.getElementById('mem-metric').innerText = `${metrics.mem_usage.toFixed(2)}%`;
+            document.getElementById('disk-metric').innerText = `${metrics.disk_usage.toFixed(2)}%`;
             document.getElementById('req-metric').innerText = metrics.requests;
 
             // Append raw transaction to visual console logger

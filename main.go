@@ -9,6 +9,7 @@ import (
 	"time"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/disk"
 )
 
 // Metrics structure remains matching your frontend names
@@ -17,6 +18,7 @@ type Metrics struct {
 	CPUUsage  float64 `json:"cpu_usage"`
 	MemUsage  float64 `json:"mem_usage"`
 	Requests  int     `json:"requests"` // We can use this to show total memory used in MB instead
+	DiskUsage float64 `json:"disk_usage"`
 }
 
 func generateRealData(broker *Broker) {
@@ -43,12 +45,20 @@ func generateRealData(broker *Broker) {
 			totalUsedMB = int(vMem.Used / 1024 / 1024) 
 		}
 
+		// Check Disk Percentage
+		diskUsage, err := disk.Usage("/")
+		var currentDisk float64
+		if err == nil {
+			currentDisk = diskUsage.UsedPercent
+		}
+
 		// 3. Assemble the authentic system payload
 		data := Metrics{
 			Timestamp: time.Now().Format("15:04:05.000"),
 			CPUUsage:  currentCPU,
 			MemUsage:  currentMem,
 			Requests:  totalUsedMB, // Swapping mock requests with real MB allocated
+			DiskUsage: currentDisk,
 		}
 
 		payload, err := json.Marshal(data)
