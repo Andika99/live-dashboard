@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Go Streaming Metrics Dashboard</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-8">
+    <div class="max-w-5xl mx-auto">
+        <header class="mb-8 border-b border-gray-800 pb-4 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight text-indigo-400">Telemetry Engine</h1>
+                <p class="text-gray-400 text-sm mt-1">High-frequency real-time event pipeline in Go</p>
+            </div>
+            <div class="flex items-center gap-2 bg-green-500/10 text-green-400 px-3 py-1.5 rounded-full text-xs font-mono uppercase tracking-wider">
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> Live Stream Active
+            </div>
+        </header>
+
+        <!-- Metrics Cards Grid -->
+        <main class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+                <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">CPU Utilization</h2>
+                <p id="cpu-metric" class="text-4xl font-mono font-bold text-indigo-300 mt-2">0.00%</p>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+                <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Memory Allocation</h2>
+                <p id="mem-metric" class="text-4xl font-mono font-bold text-pink-300 mt-2">0.00%</p>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+                <h2 class="text-gray-400 text-sm font-semibold uppercase tracking-wider">Inbound Requests / sec</h2>
+                <p id="req-metric" class="text-4xl font-mono font-bold text-emerald-300 mt-2">0</p>
+            </div>
+        </main>
+
+        <!-- Log Terminal Output -->
+        <section class="bg-black/50 border border-gray-800 rounded-xl p-4 shadow-inner">
+            <h3 class="text-xs font-mono text-gray-500 uppercase mb-2">Raw SSE Event Log Pipeline (Showing last 5 items)</h3>
+            <div id="log-terminal" class="font-mono text-xs text-gray-400 space-y-1 h-36 overflow-hidden flex flex-col justify-end">
+                <!-- Stream items append here dynamically -->
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // Use browser native API to listen to the Go server event stream
+        const eventSource = new EventSource('/stream');
+        const logTerminal = document.getElementById('log-terminal');
+
+        eventSource.onmessage = function(event) {
+            // Parse real-time JSON sent down from Go
+            const metrics = JSON.parse(event.data);
+
+            // Update UI elements instantly 
+            document.getElementById('cpu-metric').innerText = `${metrics.cpu_usage.toFixed(2)}%`;
+            document.getElementById('mem-metric').innerText = `${metrics.mem_usage.toFixed(2)}%`;
+            document.getElementById('req-metric').innerText = metrics.requests;
+
+            // Append raw transaction to visual console logger
+            const logLine = document.createElement('div');
+            logLine.className = 'border-l-2 border-indigo-500 pl-2 opacity-80 hover:opacity-100 transition-opacity';
+            logLine.innerText = `[${metrics.timestamp}] SSE Payload Ingested: CPU -> ${metrics.cpu_usage.toFixed(1)}% | Mem -> ${metrics.mem_usage.toFixed(1)}% | Req -> ${metrics.requests}`;
+            
+            logTerminal.appendChild(logLine);
+
+            // Keep terminal capped at last 5 entries to preserve memory
+            while (logTerminal.children.length > 5) {
+                logTerminal.removeChild(logTerminal.firstChild);
+            }
+        };
+
+        eventSource.onerror = function() {
+            console.error("SSE connection dropped or server disconnected.");
+        };
+    </script>
+</body>
+</html>
